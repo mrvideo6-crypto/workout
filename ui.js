@@ -3,7 +3,7 @@
 
 var ui = {
   tab: 'workout', screen: 'home', settings: false, edit: null, rest: null, sw: null, picker: null,
-  dayEdit: null, progEdit: null, pex: null, pper: 84, bsel: 'weight', bsub: 'metrics',
+  progEdit: null, bump: null, pex: null, pper: 84, bsel: 'weight', bsub: 'metrics',
   pose: 'front', pfilter: 'all', histN: 8, flash: null, wake: null
 };
 var photoURLs = {};
@@ -119,7 +119,7 @@ function render(toTop) {
   if (window.scrollTo) window.scrollTo(0, toTop ? 0 : y);
 }
 function screenTitle() {
-  return { active: t('t_active'), view: t('t_view'), dayedit: t('t_day'), progedit: t('t_prog') }[ui.screen] || t('tab_workout');
+  return { active: t('t_active'), view: t('t_view'), progedit: t('t_prog') }[ui.screen] || t('tab_workout');
 }
 function headerHTML() {
   var left = '', right = '<button class="ib" data-act="settings" aria-label="' + esc(t('settings')) + '">⚙︎</button>', title;
@@ -142,17 +142,15 @@ function viewHTML() {
   if (ui.tab === 'rewards') return rewardsHTML();
   if (ui.screen === 'active' && !state.active) ui.screen = 'home';
   if (ui.screen === 'view' && !ui.edit) ui.screen = 'home';
-  if (ui.screen === 'dayedit' && !ui.dayEdit) ui.screen = 'home';
   if (ui.screen === 'progedit' && !ui.progEdit) ui.screen = 'home';
   if (ui.screen === 'active' || ui.screen === 'view') return activeHTML();
-  if (ui.screen === 'dayedit') return dayEditHTML();
   if (ui.screen === 'progedit') return progEditHTML();
   return homeHTML();
 }
 function goBack() {
   if (ui.settings) { ui.settings = false; render(true); return; }
   if (ui.screen === 'view') ui.edit = null;
-  ui.dayEdit = null; ui.progEdit = null;
+  ui.progEdit = null;
   ui.screen = 'home';
   render(true);
 }
@@ -195,37 +193,35 @@ function histSummary(w) {
   if (w.end) parts.push(t('n_min', { n: Math.max(1, Math.round((w.end - w.start) / 60000)) }));
   return parts.join(' · ');
 }
+function progSummary(p) {
+  var names = wdNames(), out = [];
+  [1, 2, 3, 4, 5, 6, 0].forEach(function (k) {
+    var d = p.days && p.days[k];
+    if (d && d.items.length) out.push(names[k] + ' ' + esc(d.name));
+  });
+  return out.join(' · ');
+}
 function homeHTML() {
   var h = '';
   getHints().forEach(function (x) {
     h += '<div class="card hint-card"><div class="hint-t">' + esc(x.text) + '</div><div class="row">';
-    if (x.kind === 'today' && x.day) h += '<button class="btn sm" data-act="startday" data-id="' + x.day + '">▶ ' + t('start') + '</button>';
+    if (x.kind === 'today' && x.pid) h += '<button class="btn sm" data-act="startprog" data-id="' + x.pid + '" data-dow="' + x.dow + '">▶ ' + t('start') + '</button>';
     if (x.kind === 'photo') h += '<button class="btn sm" data-act="gophotos">📷 ' + t('photos') + '</button>';
     h += '<button class="btn sm ghost" data-act="hdis" data-id="' + esc(x.id) + '">' + t('hide') + '</button></div></div>';
   });
   if (state.active) {
     h += '<div class="card act"><div><b>' + esc(state.active.name) + '</b><div class="sub">' + t('in_progress') + ' · <span data-elapsed>' + fmtDur((Date.now() - state.active.start) / 1000) + '</span></div></div><button class="btn" data-act="resume">' + t('resume') + '</button></div>';
   } else {
-    h += '<button class="btn big" data-act="startempty">+ ' + t('start_empty') + '</button>';
+    h += '<button class="btn big" data-act="train">▶ ' + t('train') + '</button>';
   }
   var wc = weekDoneCount(), goal = state.settings.goal;
   h += '<div class="card row">' + ringSVG(wc / goal, wc + '/' + goal) + '<div class="grow"><b>' + t('week_goal') + '</b><div class="sub">' + t('week_of', { n: wc, g: goal }) + '</div></div></div>';
 
-  h += '<h2>' + t('my_days') + '</h2>';
-  if (!state.days.length) h += '<div class="empty">' + t('no_days') + '</div>';
-  state.days.forEach(function (d) {
-    var names = d.items.map(function (it) { var e = exById(it.ex); return e ? esc(e.name) : ''; }).filter(Boolean).slice(0, 4).join(', ');
-    h += '<div class="card li"><div class="grow"><b>' + esc(d.name) + '</b><div class="sub">' + names + '</div></div>' +
-      (state.active ? '' : '<button class="btn sm" data-act="startday" data-id="' + d.id + '">▶</button>') +
-      '<button class="ib" data-act="dayedit" data-id="' + d.id + '">✎</button></div>';
-  });
-  h += '<button class="btn ghost" data-act="dayedit" data-id="">+ ' + t('new_day') + '</button>';
-
   h += '<h2>' + t('programs') + '</h2>';
   if (!state.programs.length) h += '<div class="empty">' + t('no_progs') + '</div>';
   state.programs.forEach(function (p) {
-    var inf = progInfo(p), st = inf.current ? t('p_week', { w: inf.week, n: p.weeks }) : (inf.finished ? t('p_done') : t('p_soon'));
-    h += '<div class="card li"><div class="grow"><b>' + esc(p.name) + '</b><div class="sub">' + st + (p.active ? '' : ' · ' + t('p_off')) + '</div></div><button class="ib" data-act="progedit" data-id="' + p.id + '">✎</button></div>';
+    var inf = progInfo(p), st = inf.upcoming ? t('p_soon') : (inf.finished ? t('p_done') : t(inf.endless ? 'p_week_inf' : 'p_week', { w: inf.week, n: p.weeks }));
+    h += '<div class="card li"><div class="grow"><b>' + esc(p.name) + '</b><div class="sub">' + st + (p.active ? '' : ' · ' + t('p_off')) + '</div><div class="sub">' + progSummary(p) + '</div></div><button class="ib" data-act="progedit" data-id="' + p.id + '">✎</button></div>';
   });
   h += '<button class="btn ghost" data-act="progedit" data-id="">+ ' + t('new_prog') + '</button>';
 
@@ -237,6 +233,29 @@ function homeHTML() {
   });
   if (ws.length > ui.histN) h += '<button class="btn ghost" data-act="histmore">' + t('more') + '</button>';
   return h;
+}
+function openTrain() {
+  var h = '<h3>' + t('choose_prog') + '</h3>', dow = new Date().getDay();
+  if (!state.programs.length) h += '<div class="empty">' + t('no_progs') + '</div><button class="btn" data-act="progedit" data-id="">+ ' + t('new_prog') + '</button>';
+  state.programs.slice().sort(function (a, b) { return (b.active ? 1 : 0) - (a.active ? 1 : 0); }).forEach(function (p) {
+    var d = p.days && p.days[dow], has = d && d.items.length;
+    h += '<div class="card li" data-act="trainprog" data-id="' + p.id + '" style="cursor:pointer"><div class="grow"><b>' + esc(p.name) + '</b><div class="sub">' +
+      (has ? t('today_is', { day: esc(d.name) }) : t('rest_today')) + '</div></div><span class="sub">›</span></div>';
+  });
+  h += '<button class="btn ghost" data-act="startempty">' + t('start_empty') + '</button><button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
+  showSheet(h);
+}
+function openDayPick(pid) {
+  var p = progById(pid), names = wdNames(), h = '<h3>' + t('rest_pick') + '</h3>', any = false;
+  if (p) [1, 2, 3, 4, 5, 6, 0].forEach(function (k) {
+    var d = p.days && p.days[k];
+    if (!d || !d.items.length) return;
+    any = true;
+    h += '<div class="card li" data-act="startprog" data-id="' + p.id + '" data-dow="' + k + '" style="cursor:pointer"><div class="grow"><b>' + names[k] + ' · ' + esc(d.name) + '</b></div><span class="sub">▶</span></div>';
+  });
+  if (!any) h += '<div class="empty">' + t('no_days_prog') + '</div>';
+  h += '<button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
+  showSheet(h);
 }
 
 function entryHTML(W, e, ei) {
@@ -254,7 +273,11 @@ function entryHTML(W, e, ei) {
     return h;
   }
   if (ls.length) h += '<div class="sub">' + t('last') + ': ' + ls[0].sets.map(function (s) { return fmtW(s.w || 0) + '×' + (s.r || 0); }).join(' · ') + '</div>';
-  var sg = suggest(ex, W.start, W.id);
+  var it = planItem(W, e), sg = it ? null : suggest(ex, W.start, W.id);
+  if (it) {
+    h += '<div class="sub sug">' + t('plan_line', { s: it.sets || e.sets.length, r: it.reps || '?' }) + (it.w != null ? ' · ' + fmtW(it.w) + ' ' + unitLabel() : '') +
+      (it.up > 0 ? ' · ' + t('plan_up', { n: it.up }) : '') + '</div>';
+  }
   if (sg) {
     h += '<div class="sub sug">' + t('sug', { w: fmtW(sg.w), u: unitLabel(), r: sg.r }) +
       (sg.kind === 'up' ? '<span class="tag up">▲ ' + t('sug_up') + '</span>' : (sg.kind === 'deload' ? '<span class="tag deload">' + t('sug_deload') + '</span>' : '')) + '</div>';
@@ -286,39 +309,56 @@ function activeHTML() {
   return h;
 }
 
-function dayEditHTML() {
-  var d = ui.dayEdit;
-  var h = '<div class="card"><label class="f">' + t('day_name') + '</label><input data-in="dname" value="' + esc(d.name) + '" placeholder="' + esc(t('day_name_ph')) + '"></div>';
-  d.items.forEach(function (it, i) {
-    var ex = exById(it.ex);
-    if (!ex) return;
-    h += '<div class="card li"><div class="grow"><b>' + esc(ex.name) + '</b></div>' +
-      (ex.type === 'strength' ? '<div class="step"><button data-act="dsets" data-i="' + i + '" data-d="-1">−</button><span>' + (it.sets || 3) + '</span><button data-act="dsets" data-i="' + i + '" data-d="1">+</button></div>' : '') +
-      '<button class="ib sm" data-act="dup" data-i="' + i + '">↑</button><button class="ib sm" data-act="ddown" data-i="' + i + '">↓</button><button class="ib sm" data-act="drem" data-i="' + i + '">✕</button></div>';
-  });
-  if (!d.items.length) h += '<div class="empty">' + t('day_empty') + '</div>';
-  h += '<button class="btn ghost" data-act="addex" data-to="day">+ ' + t('add_ex') + '</button>';
-  h += '<button class="btn" data-act="daysave">' + t('save') + '</button>';
-  if (d.id) h += '<button class="btn danger" data-act="daydel">' + t('delete') + '</button>';
-  return h;
+function pday(P, k) {
+  if (!P.days[k]) P.days[k] = { name: '', items: [] };
+  return P.days[k];
 }
 function progEditHTML() {
-  var P = ui.progEdit, h = '';
-  if (!state.days.length) return '<div class="empty">' + t('prog_need_days') + '</div>';
-  h += '<div class="card"><label class="f">' + t('prog_name') + '</label><input id="pn" value="' + esc(P.name) + '" placeholder="' + esc(t('prog_name_ph')) + '">' +
-    '<div class="two"><div><label class="f">' + t('prog_weeks') + '</label><input id="pw" inputmode="numeric" value="' + P.weeks + '"></div>' +
-    '<div><label class="f">' + t('prog_start') + '</label><input id="ps" type="date" value="' + esc(P.start) + '"></div></div>' +
-    '<div class="chkrow"><input type="checkbox" id="pa"' + (P.active ? ' checked' : '') + '><label for="pa">' + t('prog_active') + '</label></div></div>';
-  h += '<h2>' + t('prog_sched') + '</h2><div class="card">';
-  var names = wdNames();
+  var P = ui.progEdit, h = '', names = wdNames();
+  h += '<div class="card"><label class="f" style="margin-top:0">' + t('prog_name') + '</label><input data-in="pname" value="' + esc(P.name) + '" placeholder="' + esc(t('prog_name_ph')) + '">' +
+    '<div class="chkrow"><input type="checkbox" data-in="pactive" id="pa"' + (P.active ? ' checked' : '') + '><label for="pa">' + t('prog_active') + '</label></div></div>';
+  h += '<h2>' + t('prog_sched') + '</h2><div class="sub" style="margin:0 4px 6px">' + t('prog_help') + '</div>';
   [1, 2, 3, 4, 5, 6, 0].forEach(function (k) {
-    h += '<div class="row" style="margin:6px 0"><div style="width:34px"><b>' + names[k] + '</b></div><select id="pd' + k + '">' + opt('', '—', !P.sched[k]) +
-      state.days.map(function (d) { return opt(d.id, d.name, P.sched[k] === d.id); }).join('') + '</select></div>';
+    var d = P.days[k] || { name: '', items: [] };
+    h += '<div class="card"><div class="row"><b style="width:30px">' + names[k] + '</b><input data-in="pdname" data-dow="' + k + '" value="' + esc(d.name) + '" placeholder="' + esc(t('day_name_ph')) + '"></div>';
+    if (!d.items.length) h += '<div class="sub" style="margin:8px 0 0">' + t('rest_day') + '</div>';
+    d.items.forEach(function (it, i) {
+      var ex = exById(it.ex);
+      if (!ex) return;
+      h += '<div class="pit"><div class="row"><b class="grow">' + esc(ex.name) + (ex.type === 'cardio' ? ' <span class="sub">' + t('cardio') + '</span>' : '') + '</b>' +
+        '<button class="ib sm" data-act="pup" data-dow="' + k + '" data-i="' + i + '">↑</button><button class="ib sm" data-act="pdown" data-dow="' + k + '" data-i="' + i + '">↓</button><button class="ib sm" data-act="prem" data-dow="' + k + '" data-i="' + i + '">✕</button></div>';
+      function fld(f, label, val, mode) {
+        return '<div><label class="f">' + label + '</label><input data-in="pi" data-f="' + f + '" data-dow="' + k + '" data-i="' + i + '" inputmode="' + mode + '" value="' + esc(val) + '"></div>';
+      }
+      if (ex.type === 'cardio') {
+        h += '<div class="pf one">' + fld('min', t('min'), it.min > 0 ? f1(it.min) : '', 'decimal') + '</div>';
+      } else {
+        h += '<div class="pf">' + fld('sets', t('sets_s'), it.sets || 3, 'numeric') + fld('reps', t('reps'), it.reps || '', 'numeric') +
+          fld('w', unitLabel(), it.w == null ? '' : fmtW(it.w), 'decimal') + fld('up', t('up_at'), it.up || '', 'numeric') + '</div>';
+      }
+      h += '</div>';
+    });
+    h += '<div class="two" style="margin-top:8px"><button class="btn sm ghost" data-act="addex" data-to="prog:' + k + '" data-kind="strength">+ ' + t('add_ex') + '</button>' +
+      '<button class="btn sm ghost" data-act="addex" data-to="prog:' + k + '" data-kind="cardio">+ ' + t('cardio') + '</button></div></div>';
   });
-  h += '</div><button class="btn" data-act="progsave">' + t('save') + '</button>';
+  h += '<div class="sub" style="margin:0 4px">' + t('up_help') + '</div>';
+  h += '<button class="btn" data-act="progsave">' + t('save') + '</button>';
   h += '<button class="btn ghost" data-act="progics">📅 ' + t('to_calendar') + '</button><div class="sub">' + t('ics_note') + '</div>';
   if (progById(P.id)) h += '<button class="btn danger" data-act="progdel">' + t('delete') + '</button>';
   return h;
+}
+// Чистая копия программы для сохранения: пустые дни (без упражнений) = отдых
+function cleanProg(P) {
+  var out = clone(P), names = wdNames();
+  out.days = {};
+  Object.keys(P.days).forEach(function (k) {
+    var d = P.days[k];
+    if (!d.items.length) return;
+    out.days[k] = { name: String(d.name || '').trim() || names[k], items: clone(d.items) };
+  });
+  out.name = String(P.name || '').trim();
+  out.weeks = 0;
+  return out;
 }
 
 /* ---------- вкладка «Прогресс» ---------- */
@@ -508,6 +548,7 @@ function settingsHTML() {
   h += '<label class="f">' + t('s_unit') + '</label><select data-set="unit">' + opt('kg', t('kg'), S.unit === 'kg') + opt('lb', t('lb'), S.unit === 'lb') + '</select>';
   h += '<div class="two"><div><label class="f">' + t('s_rest') + '</label><input data-set="rest" inputmode="numeric" value="' + S.rest + '"></div>' +
     '<div><label class="f">' + t('s_goal') + '</label><input data-set="goal" inputmode="numeric" value="' + S.goal + '"></div></div>';
+  h += '<label class="f">' + t('s_bump') + '</label><input data-set="bumpDays" inputmode="numeric" value="' + S.bumpDays + '"><div class="sub" style="margin-top:4px">' + t('s_bump_help') + '</div>';
   h += '<label class="f">' + t('s_remind') + '</label><input type="time" data-set="remindTime" value="' + esc(S.remindTime) + '">';
   h += '<div class="chkrow"><input type="checkbox" id="swk" data-set="wake"' + (S.wake ? ' checked' : '') + '><label for="swk">' + t('s_wake') + '</label></div>';
   h += '<label class="f">' + t('s_levels') + '</label><input data-set="levels" value="' + esc(S.levels) + '" placeholder="' + esc(t('levels')) + '">';
@@ -522,6 +563,7 @@ function applySetting(el, fromChange) {
     case 'unit': S.unit = v === 'lb' ? 'lb' : 'kg'; break;
     case 'rest': S.rest = Math.max(10, Math.min(600, parseInt(v, 10) || 90)); break;
     case 'goal': S.goal = Math.max(1, Math.min(14, parseInt(v, 10) || 3)); break;
+    case 'bumpDays': S.bumpDays = Math.max(0, Math.min(90, parseInt(v, 10) || 0)); break;
     case 'remindTime': S.remindTime = v || '18:00'; break;
     case 'wake': S.wake = !!v; if (!v) wakeOff(); break;
     case 'levels': S.levels = v; break;
@@ -534,13 +576,14 @@ function applySetting(el, fromChange) {
 }
 
 /* ---------- листы (всплывающие панели) ---------- */
-function openPicker(to) {
+function openPicker(to, kind) {
   ui.picker = to;
-  var h = '<h3>' + t('add_ex') + '</h3><div class="two"><input id="nxn" placeholder="' + esc(t('ex_name')) + '"><select id="nxt">' + opt('strength', t('strength'), true) + opt('cardio', t('cardio'), false) + '</select></div>' +
+  var h = '<h3>' + t(kind === 'cardio' ? 'add_cardio' : 'add_ex') + '</h3><div class="two"><input id="nxn" placeholder="' + esc(t('ex_name')) + '"><select id="nxt">' + opt('strength', t('strength'), kind !== 'cardio') + opt('cardio', t('cardio'), kind === 'cardio') + '</select></div>' +
     '<button class="btn" data-act="newex">' + t('create_add') + '</button>';
-  if (state.exercises.length) {
+  var list = state.exercises.filter(function (e) { return !kind || e.type === kind; });
+  if (list.length) {
     h += '<h2>' + t('my_exercises') + '</h2><input id="exq" data-in="q" placeholder="' + esc(t('search')) + '"><div class="exlist">';
-    state.exercises.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (e) {
+    list.sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (e) {
       h += '<div class="li exitem" data-name="' + esc(e.name.toLowerCase()) + '"><button class="grow lbtn" data-act="pick" data-id="' + e.id + '"><b>' + esc(e.name) + '</b> <span class="sub">' + (e.type === 'cardio' ? t('cardio') : t('strength')) + '</span></button><button class="ib" data-act="exedit" data-id="' + e.id + '">✎</button></div>';
     });
     h += '</div>';
@@ -548,11 +591,23 @@ function openPicker(to) {
   h += '<button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
   showSheet(h);
 }
+function newPlanItem(exId) {
+  var ex = exById(exId);
+  if (ex.type === 'cardio') return { id: uid(), ex: exId, min: 20 };
+  var ls = lastSessions(exId, 1), pr = ex.prog || {}, reps = pr.min > 0 ? pr.min : 10, up = pr.max > reps ? pr.max : reps + 3;
+  return { id: uid(), ex: exId, sets: 3, reps: reps, w: ls.length ? (topWeight(ls[0].sets) || null) : null, up: up };
+}
 function addExerciseTo(exId) {
-  if (ui.picker === 'day' && ui.dayEdit) ui.dayEdit.items.push({ ex: exId, sets: 3 });
+  if (ui.picker && ui.picker.indexOf('prog:') === 0 && ui.progEdit) pday(ui.progEdit, ui.picker.slice(5)).items.push(newPlanItem(exId));
   else if (curW()) { var W = curW(); W.entries.push(makeEntry(exId, 3, W.start, W.id)); persist(); }
   closeSheet();
   render();
+}
+function openBump(b) {
+  ui.bump = b;
+  showSheet('<h3>🏋️ ' + t('bump_title') + '</h3><div class="sub" style="font-size:15px"><b>' + esc(b.name) + '</b>: ' + t('bump_text', { r: b.reps, up: b.up }) + '</div>' +
+    '<label class="f">' + t('bump_new') + ', ' + unitLabel() + '</label><input id="bnw" inputmode="decimal" value="' + fmtW(b.to) + '">' +
+    '<button class="btn big" data-act="bumpyes">' + t('bump_yes') + '</button><button class="btn ghost" data-act="closesheet">' + t('bump_no') + '</button>');
 }
 function openExMenu(ei) {
   var W = curW(), ex = exById(W.entries[ei].ex), n = W.entries.length;
@@ -579,7 +634,6 @@ function openFinish() {
   var W = state.active, any = W.entries.some(function (e) { return e.sets.some(function (s) { return s.done; }); });
   if (!any) { toast(t('no_sets')); return; }
   var h = '<h3>' + t('finish') + '</h3><div class="sub">' + t('sum', { s: workoutSets(W), m: Math.max(1, Math.round((Date.now() - W.start) / 60000)) }) + '</div>';
-  if (!W.dayId) h += '<div class="chkrow"><input type="checkbox" id="sdchk"><label for="sdchk">' + t('save_as_day') + '</label></div><input id="sdname" value="' + esc(W.name) + '">';
   h += '<button class="btn big" data-act="finishgo">' + t('save') + '</button><button class="btn ghost" data-act="closesheet">' + t('cancel') + '</button>';
   showSheet(h);
 }
@@ -591,7 +645,7 @@ function onClick(e) {
   var d = el.dataset, a = d.act;
   unlockAudio();
   if (a === 'bd') { if (e.target === el) closeSheet(); return; }
-  var ei = +d.ei, si = +d.si, W, s, ex, i, v;
+  var ei = +d.ei, si = +d.si, W, s, ex, i, v, P;
   switch (a) {
     case 'tab': ui.tab = d.tab; ui.settings = false; render(true); break;
     case 'settings': ui.settings = true; render(true); break;
@@ -601,16 +655,22 @@ function onClick(e) {
     case 'gophotos': ui.tab = 'body'; ui.bsub = 'photos'; render(true); break;
 
     /* тренировка */
-    case 'startempty': startWorkout(null); ui.screen = 'active'; wakeOn(); render(true); break;
-    case 'startday':
+    case 'train': if (state.active) { toast(t('already')); break; } openTrain(); break;
+    case 'trainprog':
+      i = new Date().getDay(); P = progById(d.id);
+      if (P && P.days && P.days[i] && P.days[i].items.length) { startWorkout(P.id, i); closeSheet(); ui.tab = 'workout'; ui.screen = 'active'; wakeOn(); render(true); }
+      else openDayPick(d.id);
+      break;
+    case 'startempty': closeSheet(); startWorkout(null); ui.screen = 'active'; wakeOn(); render(true); break;
+    case 'startprog':
       if (state.active) { toast(t('already')); break; }
-      startWorkout(d.id); ui.tab = 'workout'; ui.screen = 'active'; wakeOn(); render(true); break;
+      startWorkout(d.id, +d.dow); closeSheet(); ui.tab = 'workout'; ui.screen = 'active'; wakeOn(); render(true); break;
     case 'resume': ui.screen = 'active'; render(true); break;
     case 'openw':
       for (i = 0; i < state.workouts.length; i++) if (state.workouts[i].id === d.id) { ui.edit = clone(state.workouts[i]); ui.screen = 'view'; }
       render(true); break;
     case 'histmore': ui.histN += 15; render(); break;
-    case 'addex': openPicker(d.to); break;
+    case 'addex': openPicker(d.to, d.kind); break;
     case 'pick': addExerciseTo(d.id); break;
     case 'newex':
       v = $('nxn').value.trim();
@@ -637,7 +697,8 @@ function onClick(e) {
     case 'exdel':
       if (!confirm(t('ex_delete_q'))) break;
       state.exercises = state.exercises.filter(function (x) { return x.id !== d.id; });
-      state.days.forEach(function (dd) { dd.items = dd.items.filter(function (it) { return it.ex !== d.id; }); });
+      state.programs.forEach(function (pp) { Object.keys(pp.days || {}).forEach(function (k) { pp.days[k].items = pp.days[k].items.filter(function (it) { return it.ex !== d.id; }); }); });
+      if (ui.progEdit) Object.keys(ui.progEdit.days).forEach(function (k) { ui.progEdit.days[k].items = ui.progEdit.days[k].items.filter(function (it) { return it.ex !== d.id; }); });
       if (state.active) state.active.entries = state.active.entries.filter(function (x) { return x.ex !== d.id; });
       if (ui.edit) ui.edit.entries = ui.edit.entries.filter(function (x) { return x.ex !== d.id; });
       save(); closeSheet(); render(); break;
@@ -667,7 +728,9 @@ function onClick(e) {
         if (checkPR(W, ei, si)) { s.pr = true; ui.flash = ei + '-' + si; toast('🏆 ' + t('new_pr')); }
         startRest(ex);
       } else { s.done = false; delete s.pr; }
-      persist(); render(); break;
+      persist(); render();
+      if (s.done && !('s' in s) && !ui.edit) { v = bumpCheck(W, W.entries[ei]); if (v) openBump(v); }
+      break;
     case 'sw':
       if (ui.sw && ui.sw.ei === ei) {
         s = curW().entries[ei].sets[0];
@@ -675,6 +738,11 @@ function onClick(e) {
         s.done = true; ui.sw = null; persist();
       } else ui.sw = { ei: ei, start: Date.now() };
       render(); break;
+    case 'bumpyes':
+      v = num($('bnw').value);
+      if (!(v > 0)) { toast(t('need_num')); break; }
+      if (ui.bump && applyBump(ui.bump, toKg(v))) toast(t('bumped', { w: fmtW(toKg(v)), u: unitLabel() }));
+      ui.bump = null; closeSheet(); break;
     case 'restm': if (ui.rest) { ui.rest.end -= 15000; ui.rest.total = Math.max(1, ui.rest.total - 15); renderTimer(); } break;
     case 'restp': if (ui.rest) { ui.rest.end += 15000; ui.rest.total += 15; renderTimer(); } break;
     case 'restskip': ui.rest = null; renderTimer(); break;
@@ -694,44 +762,21 @@ function onClick(e) {
       state.workouts = state.workouts.filter(function (x) { return x.id !== ui.edit.id; });
       save(); ui.edit = null; ui.screen = 'home'; render(true); break;
 
-    /* дни */
-    case 'dayedit':
-      ui.dayEdit = d.id ? clone(dayById(d.id)) : { id: null, name: '', items: [] };
-      ui.tab = 'workout'; ui.screen = 'dayedit'; render(true); break;
-    case 'dsets': i = ui.dayEdit.items[+d.i]; i.sets = Math.max(1, Math.min(12, (i.sets || 3) + (+d.d))); render(); break;
-    case 'dup': case 'ddown':
-      i = +d.i; v = a === 'dup' ? i - 1 : i + 1;
-      if (v >= 0 && v < ui.dayEdit.items.length) { s = ui.dayEdit.items[i]; ui.dayEdit.items[i] = ui.dayEdit.items[v]; ui.dayEdit.items[v] = s; }
-      render(); break;
-    case 'drem': ui.dayEdit.items.splice(+d.i, 1); render(); break;
-    case 'daysave':
-      if (!ui.dayEdit.name.trim()) { toast(t('need_name')); break; }
-      ui.dayEdit.name = ui.dayEdit.name.trim();
-      if (!ui.dayEdit.id) { ui.dayEdit.id = uid(); state.days.push(ui.dayEdit); }
-      else for (i = 0; i < state.days.length; i++) if (state.days[i].id === ui.dayEdit.id) state.days[i] = ui.dayEdit;
-      save(); ui.dayEdit = null; ui.screen = 'home'; render(true); toast(t('saved')); break;
-    case 'daydel':
-      if (!confirm(t('delete_q'))) break;
-      var did = ui.dayEdit.id;
-      state.days = state.days.filter(function (x) { return x.id !== did; });
-      state.programs.forEach(function (p) { Object.keys(p.sched).forEach(function (k) { if (p.sched[k] === did) delete p.sched[k]; }); });
-      save(); ui.dayEdit = null; ui.screen = 'home'; render(true); break;
-
     /* программы */
     case 'progedit':
-      ui.progEdit = d.id ? clone(progById(d.id)) : { id: uid(), name: '', weeks: 8, start: todayStr(), active: true, sched: {} };
+      closeSheet();
+      ui.progEdit = d.id ? clone(progById(d.id)) : { id: uid(), name: '', weeks: 0, start: todayStr(), active: true, days: {} };
+      if (!ui.progEdit.days) ui.progEdit.days = {};
       ui.tab = 'workout'; ui.screen = 'progedit'; render(true); break;
+    case 'pup': case 'pdown':
+      s = pday(ui.progEdit, d.dow).items; i = +d.i; v = a === 'pup' ? i - 1 : i + 1;
+      if (v >= 0 && v < s.length) { ex = s[i]; s[i] = s[v]; s[v] = ex; }
+      render(); break;
+    case 'prem': pday(ui.progEdit, d.dow).items.splice(+d.i, 1); render(); break;
     case 'progsave':
-      var P = ui.progEdit;
-      v = $('pn').value.trim();
-      if (!v) { toast(t('need_name')); break; }
-      P.name = v;
-      P.weeks = Math.max(1, Math.min(52, parseInt($('pw').value, 10) || 8));
-      P.start = $('ps').value || todayStr();
-      P.active = $('pa').checked;
-      P.sched = {};
-      [0, 1, 2, 3, 4, 5, 6].forEach(function (k) { var x = $('pd' + k).value; if (x) P.sched[k] = x; });
-      if (!Object.keys(P.sched).length) { toast(t('need_sched')); break; }
+      P = cleanProg(ui.progEdit);
+      if (!P.name) { toast(t('need_name')); break; }
+      if (!Object.keys(P.days).length) { toast(t('need_sched')); break; }
       if (progById(P.id)) { for (i = 0; i < state.programs.length; i++) if (state.programs[i].id === P.id) state.programs[i] = P; }
       else state.programs.push(P);
       save(); ui.progEdit = null; ui.screen = 'home'; render(true); toast(t('saved')); break;
@@ -740,14 +785,10 @@ function onClick(e) {
       state.programs = state.programs.filter(function (x) { return x.id !== ui.progEdit.id; });
       save(); ui.progEdit = null; ui.screen = 'home'; render(true); break;
     case 'progics':
-      var PP = clone(ui.progEdit);
-      PP.name = $('pn').value.trim() || PP.name || t('tab_workout');
-      PP.weeks = Math.max(1, Math.min(52, parseInt($('pw').value, 10) || PP.weeks));
-      PP.start = $('ps').value || PP.start;
-      PP.sched = {};
-      [0, 1, 2, 3, 4, 5, 6].forEach(function (k) { var x = $('pd' + k).value; if (x) PP.sched[k] = x; });
-      if (!Object.keys(PP.sched).length) { toast(t('need_sched')); break; }
-      saveFile('program.ics', 'text/calendar', buildProgramICS(PP)); break;
+      P = cleanProg(ui.progEdit);
+      if (!P.name) P.name = t('tab_workout');
+      if (!Object.keys(P.days).length) { toast(t('need_sched')); break; }
+      saveFile('program.ics', 'text/calendar', buildProgramICS(P)); break;
 
     /* прогресс */
     case 'period': ui.pper = +d.v; render(); break;
@@ -822,16 +863,9 @@ function onClick(e) {
 }
 
 function finishGo() {
-  var W = state.active, chk = $('sdchk'), nm = $('sdname');
-  var wantDay = !!(chk && chk.checked), dayName = nm ? nm.value.trim() : '';
+  var W = state.active;
   var lvBefore = levelInfo(totalXP()).L;
-  var planned = W.entries.map(function (e) { return { ex: e.ex, n: e.sets.length }; });
   if (!finalizeWorkout(W)) { toast(t('no_sets')); return; }
-  if (wantDay && dayName) {
-    var d = { id: uid(), name: dayName, items: planned.filter(function (p) { return exById(p.ex); }).map(function (p) { return { ex: p.ex, sets: Math.max(1, p.n) }; }) };
-    state.days.push(d);
-    W.dayId = d.id;
-  }
   state.workouts.push(W);
   sortAll(state);
   state.active = null; ui.rest = null; ui.sw = null; wakeOff();
@@ -861,7 +895,16 @@ function onInput(e) {
     s.s = isNaN(v) ? 0 : Math.round(v * 60);
     persist();
   } else if (k === 'wname') { curW().name = el.value; persist(); }
-  else if (k === 'dname') { ui.dayEdit.name = el.value; }
+  else if (k === 'pname') ui.progEdit.name = el.value;
+  else if (k === 'pactive') ui.progEdit.active = el.checked;
+  else if (k === 'pdname') pday(ui.progEdit, el.dataset.dow).name = el.value;
+  else if (k === 'pi') {
+    var it = pday(ui.progEdit, el.dataset.dow).items[+el.dataset.i], f = el.dataset.f;
+    v = num(el.value);
+    if (f === 'w') it.w = isNaN(v) ? null : toKg(v);
+    else if (f === 'min') it.min = isNaN(v) ? 0 : v;
+    else it[f] = isNaN(v) ? 0 : Math.max(0, Math.round(v));
+  }
   else if (k === 'q') {
     var q = el.value.trim().toLowerCase(), items = document.querySelectorAll('.exitem');
     for (var i = 0; i < items.length; i++) items[i].style.display = (!q || items[i].dataset.name.indexOf(q) >= 0) ? '' : 'none';

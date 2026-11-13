@@ -27,7 +27,7 @@ function defaults() {
   return {
     v: 1,
     settings: { lang: 'ru', unit: 'kg', rest: 90, goal: 3, remindTime: '18:00', wake: true, levels: '',
-      photoRemind: true, photoDay: 0, photoTime: '09:00' },
+      photoRemind: true, photoDay: 0, photoTime: '09:00', bumpDays: 14 },
     exercises: [], days: [], programs: [], workouts: [], active: null,
     body: { weights: [], measures: [], values: [] },
     photos: [],
@@ -43,8 +43,32 @@ function migrate(d) {
     if (!d[k] || typeof d[k] !== 'object') d[k] = f[k];
     Object.keys(f[k]).forEach(function (j) { if (d[k][j] === undefined) d[k][j] = f[k][j]; });
   });
+  migratePrograms(d);
   sortAll(d);
   return d;
+}
+// Старые программы хранили расписание как ссылки на «дни»: копируем дни внутрь программы
+function migratePrograms(d) {
+  (d.programs || []).forEach(function (p) {
+    if (p.days && typeof p.days === 'object') return;
+    p.days = {};
+    var sch = p.sched || {};
+    Object.keys(sch).forEach(function (k) {
+      var dd = null, i;
+      for (i = 0; i < (d.days || []).length; i++) if (d.days[i].id === sch[k]) dd = d.days[i];
+      if (!dd) return;
+      p.days[k] = { name: dd.name, items: (dd.items || []).map(function (it) {
+        var ex = null, j;
+        for (j = 0; j < d.exercises.length; j++) if (d.exercises[j].id === it.ex) ex = d.exercises[j];
+        if (!ex) return null;
+        if (ex.type === 'cardio') return { id: uid(), ex: ex.id, min: 20 };
+        var pr = ex.prog || {};
+        return { id: uid(), ex: ex.id, sets: it.sets || 3, reps: pr.min || 10, w: null, up: pr.max || 0 };
+      }).filter(Boolean) };
+    });
+    delete p.sched;
+    p.weeks = 0;
+  });
 }
 function sortAll(d) {
   d.workouts.sort(function (a, b) { return a.start - b.start; });
@@ -81,7 +105,6 @@ function fmtW(kg) {
 
 /* ---------- справочники ---------- */
 function exById(id) { for (var i = 0; i < state.exercises.length; i++) if (state.exercises[i].id === id) return state.exercises[i]; return null; }
-function dayById(id) { for (var i = 0; i < state.days.length; i++) if (state.days[i].id === id) return state.days[i]; return null; }
 function progById(id) { for (var i = 0; i < state.programs.length; i++) if (state.programs[i].id === id) return state.programs[i]; return null; }
 function newExercise(name, type) {
   var e = { id: uid(), name: name, type: type, rest: null,
@@ -143,26 +166,65 @@ function suggest(ex, before, skipId) {
   return res;
 }
 
-// Заготовка упражнения внутри тренировки (подставляем рекомендацию или прошлый результат)
-function makeEntry(exId, nSets, before, skipId) {
+// Заготовка упражнения внутри тренировки. it — пункт программы (вес, подходы, повторы заданы вручную)
+function topWeight(sets) {
+  var m = 0;
+  sets.forEach(function (s) { if ((s.w || 0) > m) m = s.w; });
+  return m;
+}
+function makeEntry(exId, nSets, before, skipId, it) {
   var ex = exById(exId), e = { ex: exId, sets: [] };
-  if (ex.type === 'cardio') { e.sets.push({ s: 0, done: false }); return e; }
-  var sg = suggest(ex, before, skipId), ls = lastSessions(exId, 1, before, skipId);
-  for (var i = 0; i < nSets; i++) {
-    var w = null, r = null;
+  if (it) e.item = it.id;
+  if (ex.type === 'cardio') { e.sets.push({ s: it && it.min > 0 ? Math.round(it.min * 60) : 0, done: false }); return e; }
+  var ls = lastSessions(exId, 1, before, skipId), i, w, r;
+  if (it) {
+    w = it.w;
+    if (w == null && ls.length) w = topWeight(ls[0].sets) || null;
+    r = it.reps > 0 ? it.reps : null;
+    for (i = 0; i < nSets; i++) e.sets.push({ w: w, r: r, done: false });
+    return e;
+  }
+  var sg = suggest(ex, before, skipId);
+  for (i = 0; i < nSets; i++) {
+    w = null; r = null;
     if (sg) { w = sg.w; r = sg.r; }
     else if (ls.length) { var ps = ls[0].sets[Math.min(i, ls[0].sets.length - 1)]; w = ps.w; r = ps.r; }
     e.sets.push({ w: w, r: r, done: false });
   }
   return e;
 }
-function startWorkout(dayId) {
-  var d = dayId ? dayById(dayId) : null;
-  var w = { id: uid(), start: Date.now(), dayId: dayId || null, name: d ? d.name : t('workout'), entries: [] };
-  if (d) d.items.forEach(function (it) { if (exById(it.ex)) w.entries.push(makeEntry(it.ex, it.sets || 3)); });
+function startWorkout(progId, dow) {
+  var p = progId ? progById(progId) : null, d = p && p.days ? p.days[dow] : null;
+  var w = { id: uid(), start: Date.now(), progId: p ? p.id : null, dow: d ? +dow : null, name: d ? d.name : t('workout'), entries: [] };
+  if (d) d.items.forEach(function (it) { if (exById(it.ex)) w.entries.push(makeEntry(it.ex, it.sets || 3, undefined, undefined, it)); });
   state.active = w;
   save();
   return w;
+}
+function planItem(W, e) {
+  if (!e.item || !W.progId) return null;
+  var p = progById(W.progId), d = p && p.days ? p.days[W.dow] : null;
+  if (!d) return null;
+  for (var i = 0; i < d.items.length; i++) if (d.items[i].id === e.item) return d.items[i];
+  return null;
+}
+// Предложение повысить вес: все подходы выполнены, повторов в каждом не меньше порога
+function bumpCheck(W, e) {
+  var it = planItem(W, e), ex = exById(e.ex);
+  if (!it || !ex || ex.type !== 'strength' || !(it.up > 0) || !e.sets.length) return null;
+  if (!e.sets.every(function (s) { return s.done && s.r > 0; })) return null;
+  var minR = Math.min.apply(null, e.sets.map(function (s) { return s.r; }));
+  if (minR < it.up) return null;
+  var gap = (state.settings.bumpDays | 0) * 864e5;
+  if (gap > 0 && it.bumpAt && Date.now() - it.bumpAt < gap) return null;
+  var step = (ex.prog && ex.prog.step > 0) ? ex.prog.step : 2.5, base = topWeight(e.sets) || it.w || 0;
+  return { pid: W.progId, dow: W.dow, iid: it.id, name: ex.name, reps: minR, up: it.up, from: base, to: rnd2(base + step) };
+}
+function applyBump(b, newKg) {
+  var p = progById(b.pid), d = p && p.days ? p.days[b.dow] : null;
+  if (!d) return false;
+  for (var i = 0; i < d.items.length; i++) if (d.items[i].id === b.iid) { d.items[i].w = newKg; d.items[i].bumpAt = Date.now(); save(); return true; }
+  return false;
 }
 
 // Новый рекорд? (вес больше прежнего максимума или тот же вес с большим числом повторов)
@@ -363,8 +425,8 @@ function checkAch() {
 /* ---------- программы ---------- */
 function progInfo(p) {
   var sm = weekStart(parseDay(p.start).getTime()).getTime(), cm = weekStart(Date.now()).getTime();
-  var wk = Math.round((cm - sm) / (7 * 864e5)) + 1;
-  return { week: wk, total: p.weeks, current: wk >= 1 && wk <= p.weeks, finished: wk > p.weeks, upcoming: wk < 1 };
+  var wk = Math.round((cm - sm) / (7 * 864e5)) + 1, inf = !(p.weeks > 0);
+  return { week: wk, total: p.weeks, endless: inf, current: wk >= 1 && (inf || wk <= p.weeks), finished: !inf && wk > p.weeks, upcoming: wk < 1 };
 }
 
 /* ---------- умные подсказки ---------- */
@@ -377,15 +439,15 @@ function getHints() {
     if (!p.active) return;
     var inf = progInfo(p);
     if (!inf.current) return;
-    var did = p.sched[dow], d = did ? dayById(did) : null;
-    if (d && !todayWs.length && !state.active) {
-      out.push({ id: 'today-' + p.id, kind: 'today', day: d.id, text: t('h_today', { day: d.name, prog: p.name, w: inf.week, n: p.weeks }) });
+    var d = p.days && p.days[dow];
+    if (d && d.items.length && !todayWs.length && !state.active) {
+      out.push({ id: 'today-' + p.id, kind: 'today', pid: p.id, dow: dow, text: t(inf.endless ? 'h_today2' : 'h_today', { day: d.name, prog: p.name, w: inf.week, n: p.weeks }) });
     }
     var missed = 0, mon = weekStart(now), sd = parseDay(p.start);
     for (var k = 0; k < 7; k++) {
       var dt = new Date(mon); dt.setDate(dt.getDate() + k);
       if (dt.getTime() >= td.getTime() || dt.getTime() < sd.getTime()) continue;
-      if (!p.sched[dt.getDay()]) continue;
+      if (!(p.days && p.days[dt.getDay()] && p.days[dt.getDay()].items.length)) continue;
       var key = dayKey(dt.getTime());
       if (!state.workouts.some(function (w) { return dayKey(w.start) === key; })) missed++;
     }
@@ -408,7 +470,7 @@ function getHints() {
     if (now - lw.start < 14 * 864e5) {
       var ups = [], des = [];
       lw.entries.forEach(function (e) {
-        var ex = exById(e.ex), sg = suggest(ex);
+        var ex = exById(e.ex), sg = e.item ? null : suggest(ex);
         if (!sg) return;
         var lab = ex.name + ' → ' + fmtW(sg.w) + ' ' + unitLabel();
         if (sg.kind === 'up') ups.push(lab);
@@ -465,13 +527,13 @@ function parseHM(s, dh, dm) {
 function buildProgramICS(p) {
   var hm = parseHM(state.settings.remindTime, 18, 0);
   var startDay = parseDay(p.start), mon = weekStart(startDay.getTime()), evs = [];
-  Object.keys(p.sched).forEach(function (k) {
-    var d = dayById(p.sched[k]);
-    if (!d) return;
+  Object.keys(p.days || {}).forEach(function (k) {
+    var d = p.days[k];
+    if (!d || !d.items.length) return;
     k = +k;
     var first = new Date(mon);
     first.setDate(first.getDate() + (k + 6) % 7);
-    var weeks = p.weeks;
+    var weeks = p.weeks > 0 ? p.weeks : 52;
     if (first.getTime() < startDay.getTime()) { first.setDate(first.getDate() + 7); weeks = Math.max(1, weeks - 1); }
     var names = d.items.map(function (it) { var e = exById(it.ex); return e ? e.name : ''; }).filter(Boolean).join(', ');
     evs.push(icsEvent(p.id + '-' + k, first, hm[0], hm[1], 60, weeks, ICS_CODES[k], p.name + ': ' + d.name, names, [30, 0]));

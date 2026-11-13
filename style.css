@@ -119,3 +119,8 @@ table.wk th{font-size:12px;color:var(--sub);font-weight:600}
 .chkrow input{width:22px;height:22px;flex:none}
 #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 56px);transform:translate(-50%,-20px);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:30;max-width:90vw;text-align:center}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+.pit{border-top:1px solid var(--bd);margin-top:10px;padding-top:6px}
+.pf{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pf.one{grid-template-columns:1fr 3fr}
+.pf label.f{margin:4px 0 2px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf input{text-align:center;padding:9px 4px}

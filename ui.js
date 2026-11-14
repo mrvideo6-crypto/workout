@@ -261,7 +261,7 @@ function openDayPick(pid) {
 function entryHTML(W, e, ei) {
   var ex = exById(e.ex);
   if (!ex) return '';
-  var h = '<div class="card ex"><div class="exh"><b>' + esc(ex.name) + '</b><button class="ib" data-act="exmenu" data-ei="' + ei + '">⋯</button></div>';
+  var h = '<div class="card ex"><div class="exh"><b>' + esc(ex.name) + '</b><span><button class="ib" data-act="tech" data-id="' + ex.id + '" aria-label="' + esc(t('technique')) + '">ⓘ</button><button class="ib" data-act="exmenu" data-ei="' + ei + '">⋯</button></span></div>';
   var ls = lastSessions(ex.id, 1, W.start, W.id);
   if (ex.type === 'cardio') {
     var s0 = e.sets[0];
@@ -326,7 +326,7 @@ function progEditHTML() {
       var ex = exById(it.ex);
       if (!ex) return;
       h += '<div class="pit"><div class="row"><b class="grow">' + esc(ex.name) + (ex.type === 'cardio' ? ' <span class="sub">' + t('cardio') + '</span>' : '') + '</b>' +
-        '<button class="ib sm" data-act="pup" data-dow="' + k + '" data-i="' + i + '">↑</button><button class="ib sm" data-act="pdown" data-dow="' + k + '" data-i="' + i + '">↓</button><button class="ib sm" data-act="prem" data-dow="' + k + '" data-i="' + i + '">✕</button></div>';
+        '<button class="ib sm" data-act="tech" data-id="' + ex.id + '">ⓘ</button><button class="ib sm" data-act="pup" data-dow="' + k + '" data-i="' + i + '">↑</button><button class="ib sm" data-act="pdown" data-dow="' + k + '" data-i="' + i + '">↓</button><button class="ib sm" data-act="prem" data-dow="' + k + '" data-i="' + i + '">✕</button></div>';
       function fld(f, label, val, mode) {
         return '<div><label class="f">' + label + '</label><input data-in="pi" data-f="' + f + '" data-dow="' + k + '" data-i="' + i + '" inputmode="' + mode + '" value="' + esc(val) + '"></div>';
       }
@@ -577,18 +577,47 @@ function applySetting(el, fromChange) {
 
 /* ---------- листы (всплывающие панели) ---------- */
 function openPicker(to, kind) {
-  ui.picker = to;
+  ui.picker = to; ui.libGrp = '';
   var h = '<h3>' + t(kind === 'cardio' ? 'add_cardio' : 'add_ex') + '</h3><div class="two"><input id="nxn" placeholder="' + esc(t('ex_name')) + '"><select id="nxt">' + opt('strength', t('strength'), kind !== 'cardio') + opt('cardio', t('cardio'), kind === 'cardio') + '</select></div>' +
     '<button class="btn" data-act="newex">' + t('create_add') + '</button>';
   var list = state.exercises.filter(function (e) { return !kind || e.type === kind; });
+  h += '<input id="exq" data-in="q" placeholder="' + esc(t('search')) + '" style="margin-top:12px">';
   if (list.length) {
-    h += '<h2>' + t('my_exercises') + '</h2><input id="exq" data-in="q" placeholder="' + esc(t('search')) + '"><div class="exlist">';
+    h += '<h2>' + t('my_exercises') + '</h2><div class="exlist">';
     list.sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (e) {
-      h += '<div class="li exitem" data-name="' + esc(e.name.toLowerCase()) + '"><button class="grow lbtn" data-act="pick" data-id="' + e.id + '"><b>' + esc(e.name) + '</b> <span class="sub">' + (e.type === 'cardio' ? t('cardio') : t('strength')) + '</span></button><button class="ib" data-act="exedit" data-id="' + e.id + '">✎</button></div>';
+      h += '<div class="li exitem" data-name="' + esc(libNorm(e.name)) + '"><button class="grow lbtn" data-act="pick" data-id="' + e.id + '"><b>' + esc(e.name) + '</b> <span class="sub">' + (e.type === 'cardio' ? t('cardio') : t('strength')) + '</span></button><button class="ib" data-act="exedit" data-id="' + e.id + '">✎</button></div>';
     });
     h += '</div>';
   }
+  h += '<h2>' + t('library') + '</h2><div class="chips" id="libchips"><button class="on" data-act="libgrp" data-v="">' + t('all') + '</button>' +
+    LIB_GROUPS.map(function (g) { return '<button data-act="libgrp" data-v="' + g + '">' + g + '</button>'; }).join('') + '</div><div class="exlist libl">';
+  EXLIB.forEach(function (x) {
+    if (kind && x.type !== kind) return;
+    h += '<div class="li exitem libitem" data-name="' + esc(libNorm(x.name + ' ' + x.kw + ' ' + x.eq + ' ' + x.grp)) + '" data-g="' + x.grp + '"><button class="grow lbtn" data-act="picklib" data-id="' + x.id + '"><b>' + esc(x.name) + '</b> <span class="sub">' + x.grp + ' · ' + x.eq + '</span></button><button class="ib" data-act="tech" data-lib="' + x.id + '" aria-label="' + esc(t('technique')) + '">ⓘ</button></div>';
+  });
+  h += '</div>';
   h += '<button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
+  showSheet(h);
+}
+function applyLibFilter() {
+  var q = libNorm(($('exq') || {}).value), g = ui.libGrp || '', items = document.querySelectorAll('.exitem'), i, it, ok;
+  for (i = 0; i < items.length; i++) {
+    it = items[i];
+    ok = !q || it.dataset.name.indexOf(q) >= 0;
+    if (ok && it.classList.contains('libitem') && g) ok = it.dataset.g === g;
+    it.style.display = ok ? '' : 'none';
+  }
+}
+function openTech(exId, libId) {
+  var ex = exId ? exById(exId) : null, lb = libId ? libById(libId) : (ex ? (ex.lib ? libById(ex.lib) : libByName(ex.name)) : null);
+  var name = lb ? lb.name : (ex ? ex.name : ''), h = '<h3>' + esc(name) + '</h3>';
+  if (lb) {
+    h += '<div class="sub">' + lb.grp + ' · ' + lb.eq + '</div><h2>' + t('how_to') + '</h2><ol class="tech">' + lb.how.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>';
+    if (lb.err.length) h += '<h2>' + t('mistakes') + '</h2><ul class="tech">' + lb.err.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+    h += '<div class="sub" style="margin-top:10px">' + t('tech_note') + '</div>';
+  } else h += '<div class="empty">' + t('no_tech') + '</div>';
+  h += '<a class="btn" style="text-align:center;text-decoration:none" target="_blank" rel="noopener" href="' + esc(videoURL(name)) + '">▶ ' + t('video') + '</a>' +
+    '<button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
   showSheet(h);
 }
 function newPlanItem(exId) {
@@ -627,7 +656,7 @@ function openExEdit(id) {
       '<div><label class="f">' + t('ex_reps_range') + '</label><div class="row"><input id="epn" inputmode="numeric" value="' + p.min + '"><input id="epx" inputmode="numeric" value="' + p.max + '"></div></div></div>' +
       '<div class="sub" style="margin-top:6px">' + t('pm_help') + '</div>';
   }
-  h += '<button class="btn" data-act="exsave" data-id="' + id + '">' + t('save') + '</button><button class="btn danger" data-act="exdel" data-id="' + id + '">' + t('ex_delete') + '</button><button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
+  h += '<button class="btn ghost" data-act="tech" data-id="' + id + '">ⓘ ' + t('technique') + '</button><button class="btn" data-act="exsave" data-id="' + id + '">' + t('save') + '</button><button class="btn danger" data-act="exdel" data-id="' + id + '">' + t('ex_delete') + '</button><button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
   showSheet(h);
 }
 function openFinish() {
@@ -676,6 +705,16 @@ function onClick(e) {
       v = $('nxn').value.trim();
       if (!v) { toast(t('need_name')); break; }
       addExerciseTo(newExercise(v, $('nxt').value).id); break;
+    case 'libgrp':
+      ui.libGrp = d.v;
+      Array.prototype.forEach.call(document.querySelectorAll('#libchips button'), function (b) { b.classList.toggle('on', b.dataset.v === d.v); });
+      applyLibFilter(); break;
+    case 'picklib':
+      v = libById(d.id);
+      for (i = 0; i < state.exercises.length; i++) if (state.exercises[i].lib === d.id || libNorm(state.exercises[i].name) === libNorm(v.name)) { ex = state.exercises[i]; if (!ex.lib) ex.lib = d.id; break; }
+      if (!ex) ex = newExercise(v.name, v.type, v.id);
+      addExerciseTo(ex.id); break;
+    case 'tech': openTech(d.id, d.lib); break;
     case 'exmenu': openExMenu(ei); break;
     case 'exedit': openExEdit(d.id); break;
     case 'exsave':
@@ -906,8 +945,7 @@ function onInput(e) {
     else it[f] = isNaN(v) ? 0 : Math.max(0, Math.round(v));
   }
   else if (k === 'q') {
-    var q = el.value.trim().toLowerCase(), items = document.querySelectorAll('.exitem');
-    for (var i = 0; i < items.length; i++) items[i].style.display = (!q || items[i].dataset.name.indexOf(q) >= 0) ? '' : 'none';
+    applyLibFilter();
   }
 }
 function onChange(e) {

@@ -106,9 +106,11 @@ function fmtW(kg) {
 /* ---------- справочники ---------- */
 function exById(id) { for (var i = 0; i < state.exercises.length; i++) if (state.exercises[i].id === id) return state.exercises[i]; return null; }
 function progById(id) { for (var i = 0; i < state.programs.length; i++) if (state.programs[i].id === id) return state.programs[i]; return null; }
-function newExercise(name, type) {
-  var e = { id: uid(), name: name, type: type, rest: null,
-    prog: { mode: type === 'strength' ? 'double' : 'none', step: 2.5, min: 8, max: 12 } };
+function newExercise(name, type, libId) {
+  var lb = libId ? libById(libId) : libByName(name);
+  if (lb) { type = lb.type; name = libId ? lb.name : name; }
+  var e = { id: uid(), name: name, type: type, rest: null, lib: lb ? lb.id : null,
+    prog: { mode: type === 'strength' ? 'double' : 'none', step: lb ? lb.step : 2.5, min: 8, max: 12 } };
   state.exercises.push(e);
   return e;
 }

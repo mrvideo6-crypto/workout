@@ -33,6 +33,9 @@ var I18N = {
     bump_yes: 'Повысить вес в программе', bump_no: 'Не сейчас', bumped: 'Рабочий вес: {w} {u}',
     sug: 'Рекомендация: {w} {u} × {r}', sug_up: 'повышаем вес', sug_deload: 'разгрузка',
 
+    library: 'Библиотека упражнений', technique: 'Техника', how_to: 'Как выполнять', mistakes: 'Частые ошибки', video: 'Видео с техникой',
+    tech_note: 'Подсказки общие. Если появилась боль, остановитесь. С тяжёлыми весами лучше заниматься со страховкой или тренером.',
+    no_tech: 'Для этого упражнения нет подсказки. Найдите видео по ссылке ниже.',
     ex_name: 'Название упражнения', strength: 'Силовое', cardio: 'Кардио', create_add: 'Создать и добавить', add_cardio: 'Кардио',
     my_exercises: 'Мои упражнения', ex_settings: 'Настройки упражнения', ex_rest: 'Отдых, сек (пусто = по умолчанию)',
     ex_prog: 'Прогрессия', pm_none: 'Без прогрессии', pm_double: 'Двойная: повышаем вес, когда выполнены все повторы',
@@ -124,6 +127,9 @@ var I18N = {
     bump_yes: 'Raise weight in program', bump_no: 'Not now', bumped: 'Working weight: {w} {u}',
     sug: 'Suggested: {w} {u} × {r}', sug_up: 'add weight', sug_deload: 'deload',
 
+    library: 'Exercise library', technique: 'Technique', how_to: 'How to do it', mistakes: 'Common mistakes', video: 'Technique video',
+    tech_note: 'General tips only. Stop if you feel pain. Use a spotter or a coach for heavy weights.',
+    no_tech: 'No tips for this exercise. Find a video via the link below.',
     ex_name: 'Exercise name', strength: 'Strength', cardio: 'Cardio', create_add: 'Create and add', add_cardio: 'Cardio',
     my_exercises: 'My exercises', ex_settings: 'Exercise settings', ex_rest: 'Rest, sec (empty = default)',
     ex_prog: 'Progression', pm_none: 'No progression', pm_double: 'Double: add weight once all reps are hit',

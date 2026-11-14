@@ -124,3 +124,7 @@ table.wk th{font-size:12px;color:var(--sub);font-weight:600}
 .pf.one{grid-template-columns:1fr 3fr}
 .pf label.f{margin:4px 0 2px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pf input{text-align:center;padding:9px 4px}
+.ex .exh span{display:flex;align-items:center}
+ol.tech,ul.tech{margin:4px 0;padding-left:22px;font-size:15px}
+ol.tech li,ul.tech li{margin:5px 0}
+.libl{max-height:34vh}

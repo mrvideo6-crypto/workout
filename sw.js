@@ -1,8 +1,8 @@
 'use strict';
 // Увеличьте номер версии, когда обновляете файлы приложения.
-var CACHE = 'wt-v2';
+var CACHE = 'wt-v3';
 var FILES = [
-  './', 'index.html', 'style.css', 'i18n.js', 'core.js', 'ui.js',
+  './', 'index.html', 'style.css', 'i18n.js', 'exlib.js', 'core.js', 'ui.js',
   'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'
 ];
 

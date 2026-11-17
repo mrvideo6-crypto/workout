@@ -128,3 +128,16 @@ table.wk th{font-size:12px;color:var(--sub);font-weight:600}
 ol.tech,ul.tech{margin:4px 0;padding-left:22px;font-size:15px}
 ol.tech li,ul.tech li{margin:5px 0}
 .libl{max-height:34vh}
+
+.dcard{border:2px solid var(--bd);border-radius:16px;margin:16px 0;overflow:hidden;background:var(--card)}
+.dhead{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 14px;border-bottom:1px solid var(--bd)}
+.dhead b{font-size:17px}
+.dbody{padding:12px}
+.dcard.t-train{border-color:var(--ac)}
+.dcard.t-train .dhead{background:var(--ac2)}
+.dcard.t-rest .dhead{background:var(--inp)}
+.dcard.t-recovery{border-color:var(--ok)}
+.dcard.t-recovery .dhead{background:rgba(47,179,80,.16)}
+.seg3{display:flex;background:var(--bg);border-radius:9px;padding:2px;gap:2px;flex:none}
+.seg3 button{border:0;background:transparent;padding:6px 8px;border-radius:7px;font-size:12px;cursor:pointer;color:var(--sub);min-height:32px}
+.seg3 button.on{background:var(--card);color:var(--tx);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.2)}

@@ -198,6 +198,7 @@ function progSummary(p) {
   [1, 2, 3, 4, 5, 6, 0].forEach(function (k) {
     var d = p.days && p.days[k];
     if (d && d.items.length) out.push(names[k] + ' ' + esc(d.name));
+    else if (d && d.type === 'recovery') out.push(names[k] + ' ' + t('day_rec_s').toLowerCase());
   });
   return out.join(' · ');
 }
@@ -240,7 +241,7 @@ function openTrain() {
   state.programs.slice().sort(function (a, b) { return (b.active ? 1 : 0) - (a.active ? 1 : 0); }).forEach(function (p) {
     var d = p.days && p.days[dow], has = d && d.items.length;
     h += '<div class="card li" data-act="trainprog" data-id="' + p.id + '" style="cursor:pointer"><div class="grow"><b>' + esc(p.name) + '</b><div class="sub">' +
-      (has ? t('today_is', { day: esc(d.name) }) : t('rest_today')) + '</div></div><span class="sub">›</span></div>';
+      (has ? t('today_is', { day: esc(d.name) }) : t(d && d.type === 'recovery' ? 'rec_today' : 'rest_today')) + '</div></div><span class="sub">›</span></div>';
   });
   h += '<button class="btn ghost" data-act="startempty">' + t('start_empty') + '</button><button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
   showSheet(h);
@@ -309,6 +310,7 @@ function activeHTML() {
   return h;
 }
 
+function dayType(d) { return d.type || (d.items.length ? 'train' : 'rest'); }
 function pday(P, k) {
   if (!P.days[k]) P.days[k] = { name: '', items: [] };
   return P.days[k];
@@ -318,10 +320,19 @@ function progEditHTML() {
   h += '<div class="card"><label class="f" style="margin-top:0">' + t('prog_name') + '</label><input data-in="pname" value="' + esc(P.name) + '" placeholder="' + esc(t('prog_name_ph')) + '">' +
     '<div class="chkrow"><input type="checkbox" data-in="pactive" id="pa"' + (P.active ? ' checked' : '') + '><label for="pa">' + t('prog_active') + '</label></div></div>';
   h += '<h2>' + t('prog_sched') + '</h2><div class="sub" style="margin:0 4px 6px">' + t('prog_help') + '</div>';
+  var full = t('wdl').split(',');
   [1, 2, 3, 4, 5, 6, 0].forEach(function (k) {
-    var d = P.days[k] || { name: '', items: [] };
-    h += '<div class="card"><div class="row"><b style="width:30px">' + names[k] + '</b><input data-in="pdname" data-dow="' + k + '" value="' + esc(d.name) + '" placeholder="' + esc(t('day_name_ph')) + '"></div>';
-    if (!d.items.length) h += '<div class="sub" style="margin:8px 0 0">' + t('rest_day') + '</div>';
+    var d = P.days[k] || { name: '', items: [] }, ty = dayType(d);
+    h += '<div class="dcard t-' + ty + '"><div class="dhead"><b class="grow">' + full[k] + '</b><div class="seg3">' +
+      [['train', 'day_train_s'], ['rest', 'day_rest_s'], ['recovery', 'day_rec_s']].map(function (x) {
+        return '<button class="' + (ty === x[0] ? 'on' : '') + '" data-act="dtype" data-dow="' + k + '" data-v="' + x[0] + '">' + t(x[1]) + '</button>';
+      }).join('') + '</div></div><div class="dbody">';
+    if (ty !== 'train') {
+      h += '<div class="sub">' + t(ty === 'rest' ? 'rest_note' : 'rec_note') + '</div></div></div>';
+      return;
+    }
+    h += '<input data-in="pdname" data-dow="' + k + '" value="' + esc(d.name) + '" placeholder="' + esc(t('day_name_ph')) + '">';
+    if (!d.items.length) h += '<div class="sub" style="margin:8px 0 0">' + t('day_empty_hint') + '</div>';
     d.items.forEach(function (it, i) {
       var ex = exById(it.ex);
       if (!ex) return;
@@ -339,7 +350,7 @@ function progEditHTML() {
       h += '</div>';
     });
     h += '<div class="two" style="margin-top:8px"><button class="btn sm ghost" data-act="addex" data-to="prog:' + k + '" data-kind="strength">+ ' + t('add_ex') + '</button>' +
-      '<button class="btn sm ghost" data-act="addex" data-to="prog:' + k + '" data-kind="cardio">+ ' + t('cardio') + '</button></div></div>';
+      '<button class="btn sm ghost" data-act="addex" data-to="prog:' + k + '" data-kind="cardio">+ ' + t('cardio') + '</button></div></div></div>';
   });
   h += '<div class="sub" style="margin:0 4px">' + t('up_help') + '</div>';
   h += '<button class="btn" data-act="progsave">' + t('save') + '</button>';
@@ -353,8 +364,9 @@ function cleanProg(P) {
   out.days = {};
   Object.keys(P.days).forEach(function (k) {
     var d = P.days[k];
-    if (!d.items.length) return;
-    out.days[k] = { name: String(d.name || '').trim() || names[k], items: clone(d.items) };
+    var ty = dayType(d);
+    if (ty !== 'train' || !d.items.length) { if (ty === 'recovery') out.days[k] = { name: '', items: [], type: 'recovery' }; return; }
+    out.days[k] = { name: String(d.name || '').trim() || names[k], items: clone(d.items), type: 'train' };
   });
   out.name = String(P.name || '').trim();
   out.weeks = 0;
@@ -811,6 +823,12 @@ function onClick(e) {
       s = pday(ui.progEdit, d.dow).items; i = +d.i; v = a === 'pup' ? i - 1 : i + 1;
       if (v >= 0 && v < s.length) { ex = s[i]; s[i] = s[v]; s[v] = ex; }
       render(); break;
+    case 'dtype':
+      P = pday(ui.progEdit, d.dow);
+      if (dayType(P) === d.v) break;
+      if (d.v !== 'train' && P.items.length && !confirm(t('dtype_q'))) break;
+      if (d.v !== 'train') { P.items = []; P.name = ''; }
+      P.type = d.v; render(); break;
     case 'prem': pday(ui.progEdit, d.dow).items.splice(+d.i, 1); render(); break;
     case 'progsave':
       P = cleanProg(ui.progEdit);

@@ -445,6 +445,7 @@ function getHints() {
     if (d && d.items.length && !todayWs.length && !state.active) {
       out.push({ id: 'today-' + p.id, kind: 'today', pid: p.id, dow: dow, text: t(inf.endless ? 'h_today2' : 'h_today', { day: d.name, prog: p.name, w: inf.week, n: p.weeks }) });
     }
+    else if (d && d.type === 'recovery' && !todayWs.length) out.push({ id: 'rec-' + p.id, kind: 'rec', text: t('h_recovery') });
     var missed = 0, mon = weekStart(now), sd = parseDay(p.start);
     for (var k = 0; k < 7; k++) {
       var dt = new Date(mon); dt.setDate(dt.getDate() + k);

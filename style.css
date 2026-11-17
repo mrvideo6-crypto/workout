@@ -141,3 +141,9 @@ ol.tech li,ul.tech li{margin:5px 0}
 .seg3{display:flex;background:var(--bg);border-radius:9px;padding:2px;gap:2px;flex:none}
 .seg3 button{border:0;background:transparent;padding:6px 8px;border-radius:7px;font-size:12px;cursor:pointer;color:var(--sub);min-height:32px}
 .seg3 button.on{background:var(--card);color:var(--tx);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.ib.mv{font-size:20px;min-width:40px;min-height:40px;padding:6px;color:var(--ac)}
+.ib.mv:disabled{opacity:.25;cursor:default}
+.ib.drag{touch-action:none;cursor:grab;color:var(--sub);font-size:22px;min-width:36px;padding:6px 4px}
+.pit.dragging{position:relative;z-index:5;background:var(--card);box-shadow:0 6px 18px rgba(0,0,0,.35);border-radius:12px;transition:none}
+.pit{user-select:none;-webkit-user-select:none}
+.pit input{user-select:text;-webkit-user-select:text}

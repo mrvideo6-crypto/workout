@@ -3,7 +3,7 @@
 
 var ui = {
   tab: 'workout', screen: 'home', settings: false, edit: null, rest: null, sw: null, picker: null,
-  progEdit: null, bump: null, pex: null, pper: 84, bsel: 'weight', bsub: 'metrics',
+  progEdit: null, progDirty: false, bump: null, pex: null, pper: 84, bsel: 'weight', bsub: 'metrics',
   pose: 'front', pfilter: 'all', histN: 8, flash: null, wake: null
 };
 var photoURLs = {};
@@ -124,7 +124,10 @@ function screenTitle() {
 function headerHTML() {
   var left = '', right = '<button class="ib" data-act="settings" aria-label="' + esc(t('settings')) + '">⚙︎</button>', title;
   if (ui.settings) { title = t('settings'); left = '<button class="ib" data-act="back">‹</button>'; right = ''; }
-  else if (ui.tab === 'workout' && ui.screen !== 'home') { title = screenTitle(); left = '<button class="ib" data-act="back">‹</button>'; right = ''; }
+  else if (ui.tab === 'workout' && ui.screen !== 'home') {
+    title = screenTitle(); left = '<button class="ib" data-act="back">‹</button>';
+    right = ui.screen === 'progedit' ? '<button class="ib" style="font-weight:700" data-act="progsave" aria-label="' + esc(t('save')) + '">✓</button>' : '';
+  }
   else title = t('tab_' + ui.tab);
   return '<div class="hl">' + left + '</div><h1>' + esc(title) + '</h1><div class="hr">' + right + '</div>';
 }
@@ -150,7 +153,8 @@ function viewHTML() {
 function goBack() {
   if (ui.settings) { ui.settings = false; render(true); return; }
   if (ui.screen === 'view') ui.edit = null;
-  ui.progEdit = null;
+  if (ui.screen === 'progedit' && ui.progEdit && !progById(ui.progEdit.id) && ui.progDirty && confirm(t('save_prog_q'))) { var sb = document.querySelector('[data-act=progsave]'); if (sb) { sb.click(); return; } }
+  ui.progEdit = null; ui.progDirty = false;
   ui.screen = 'home';
   render(true);
 }
@@ -310,6 +314,16 @@ function activeHTML() {
   return h;
 }
 
+// Правки существующей программы сохраняются сразу, не нужно искать кнопку «Сохранить»
+function autoSaveProg() {
+  ui.progDirty = true;
+  var P = ui.progEdit;
+  if (!P || !progById(P.id)) return;
+  var c = cleanProg(P), old = progById(P.id);
+  if (!c.name) c.name = old.name;
+  for (var i = 0; i < state.programs.length; i++) if (state.programs[i].id === P.id) state.programs[i] = c;
+  save();
+}
 function dayType(d) { return d.type || (d.items.length ? 'train' : 'rest'); }
 function pday(P, k) {
   if (!P.days[k]) P.days[k] = { name: '', items: [] };
@@ -336,8 +350,8 @@ function progEditHTML() {
     d.items.forEach(function (it, i) {
       var ex = exById(it.ex);
       if (!ex) return;
-      h += '<div class="pit"><div class="row"><b class="grow">' + esc(ex.name) + (ex.type === 'cardio' ? ' <span class="sub">' + t('cardio') + '</span>' : '') + '</b>' +
-        '<button class="ib sm" data-act="tech" data-id="' + ex.id + '">ⓘ</button><button class="ib sm" data-act="pup" data-dow="' + k + '" data-i="' + i + '">↑</button><button class="ib sm" data-act="pdown" data-dow="' + k + '" data-i="' + i + '">↓</button><button class="ib sm" data-act="prem" data-dow="' + k + '" data-i="' + i + '">✕</button></div>';
+      h += '<div class="pit" data-dow="' + k + '" data-i="' + i + '"><div class="row"><button class="ib mv drag" data-drag="1" aria-label="' + esc(t('drag')) + '">≡</button><b class="grow"><span class="sub">' + (i + 1) + '.</span> ' + esc(ex.name) + (ex.type === 'cardio' ? ' <span class="sub">' + t('cardio') + '</span>' : '') + '</b>' +
+        '<button class="ib sm" data-act="tech" data-id="' + ex.id + '">ⓘ</button><button class="ib mv" data-act="pup" data-dow="' + k + '" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="' + esc(t('move_up')) + '">↑</button><button class="ib mv" data-act="pdown" data-dow="' + k + '" data-i="' + i + '"' + (i === d.items.length - 1 ? ' disabled' : '') + ' aria-label="' + esc(t('move_down')) + '">↓</button><button class="ib sm" data-act="prem" data-dow="' + k + '" data-i="' + i + '">✕</button></div>';
       function fld(f, label, val, mode) {
         return '<div><label class="f">' + label + '</label><input data-in="pi" data-f="' + f + '" data-dow="' + k + '" data-i="' + i + '" inputmode="' + mode + '" value="' + esc(val) + '"></div>';
       }
@@ -639,7 +653,7 @@ function newPlanItem(exId) {
   return { id: uid(), ex: exId, sets: 3, reps: reps, w: ls.length ? (topWeight(ls[0].sets) || null) : null, up: up };
 }
 function addExerciseTo(exId) {
-  if (ui.picker && ui.picker.indexOf('prog:') === 0 && ui.progEdit) pday(ui.progEdit, ui.picker.slice(5)).items.push(newPlanItem(exId));
+  if (ui.picker && ui.picker.indexOf('prog:') === 0 && ui.progEdit) { pday(ui.progEdit, ui.picker.slice(5)).items.push(newPlanItem(exId)); autoSaveProg(); }
   else if (curW()) { var W = curW(); W.entries.push(makeEntry(exId, 3, W.start, W.id)); persist(); }
   closeSheet();
   render();
@@ -680,6 +694,50 @@ function openFinish() {
 }
 
 /* ---------- события ---------- */
+/* Перетаскивание упражнений внутри одного дня за значок ≡ */
+var drag = null;
+function onDragStart(e) {
+  var h = e.target.closest && e.target.closest('[data-drag]');
+  if (!h || ui.screen !== 'progedit' || (e.button !== undefined && e.button !== 0)) return;
+  var pit = h.closest('.pit'), card = pit.closest('.dcard'), all = Array.prototype.slice.call(card.querySelectorAll('.pit'));
+  e.preventDefault();
+  drag = { pit: pit, dow: pit.dataset.dow, from: all.indexOf(pit), to: all.indexOf(pit), all: all, y0: e.clientY, h: pit.getBoundingClientRect().height + 10,
+           mids: all.map(function (x) { var r = x.getBoundingClientRect(); return r.top + r.height / 2; }), sc0: window.scrollY };
+  pit.classList.add('dragging');
+  all.forEach(function (x) { if (x !== pit) x.style.transition = 'transform .15s'; });
+  document.addEventListener('pointermove', onDragMove);
+  document.addEventListener('pointerup', onDragEnd);
+  document.addEventListener('pointercancel', onDragEnd);
+}
+function onDragMove(e) {
+  if (!drag) return;
+  var dy = e.clientY - drag.y0 + (window.scrollY - drag.sc0), mid = drag.mids[drag.from] + dy, to = 0, j;
+  if (e.clientY < 90) window.scrollBy(0, -12); else if (e.clientY > window.innerHeight - 130) window.scrollBy(0, 12);
+  drag.pit.style.transform = 'translateY(' + dy + 'px)';
+  for (j = 0; j < drag.all.length; j++) if (j !== drag.from && drag.mids[j] < mid) to++;
+  drag.to = to;
+  drag.all.forEach(function (x, j) {
+    if (x === drag.pit) return;
+    var sh = 0;
+    if (drag.from < to && j > drag.from && j <= to) sh = -drag.h;
+    if (drag.from > to && j >= to && j < drag.from) sh = drag.h;
+    x.style.transform = sh ? 'translateY(' + sh + 'px)' : '';
+  });
+}
+function onDragEnd() {
+  document.removeEventListener('pointermove', onDragMove);
+  document.removeEventListener('pointerup', onDragEnd);
+  document.removeEventListener('pointercancel', onDragEnd);
+  if (!drag) return;
+  var d = drag; drag = null;
+  d.all.forEach(function (x) { x.style.transform = ''; x.style.transition = ''; x.classList.remove('dragging'); });
+  if (d.to !== d.from && ui.progEdit) {
+    var items = pday(ui.progEdit, d.dow).items, m = items.splice(d.from, 1)[0];
+    items.splice(d.to, 0, m);
+    autoSaveProg();
+    render();
+  }
+}
 function onClick(e) {
   var el = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
   if (!el) return;
@@ -818,25 +876,25 @@ function onClick(e) {
       closeSheet();
       ui.progEdit = d.id ? clone(progById(d.id)) : { id: uid(), name: '', weeks: 0, start: todayStr(), active: true, days: {} };
       if (!ui.progEdit.days) ui.progEdit.days = {};
-      ui.tab = 'workout'; ui.screen = 'progedit'; render(true); break;
+      ui.progDirty = false; ui.tab = 'workout'; ui.screen = 'progedit'; render(true); break;
     case 'pup': case 'pdown':
       s = pday(ui.progEdit, d.dow).items; i = +d.i; v = a === 'pup' ? i - 1 : i + 1;
       if (v >= 0 && v < s.length) { ex = s[i]; s[i] = s[v]; s[v] = ex; }
-      render(); break;
+      autoSaveProg(); render(); break;
     case 'dtype':
       P = pday(ui.progEdit, d.dow);
       if (dayType(P) === d.v) break;
       if (d.v !== 'train' && P.items.length && !confirm(t('dtype_q'))) break;
       if (d.v !== 'train') { P.items = []; P.name = ''; }
-      P.type = d.v; render(); break;
-    case 'prem': pday(ui.progEdit, d.dow).items.splice(+d.i, 1); render(); break;
+      P.type = d.v; autoSaveProg(); render(); break;
+    case 'prem': pday(ui.progEdit, d.dow).items.splice(+d.i, 1); autoSaveProg(); render(); break;
     case 'progsave':
       P = cleanProg(ui.progEdit);
       if (!P.name) { toast(t('need_name')); break; }
       if (!Object.keys(P.days).length) { toast(t('need_sched')); break; }
       if (progById(P.id)) { for (i = 0; i < state.programs.length; i++) if (state.programs[i].id === P.id) state.programs[i] = P; }
       else state.programs.push(P);
-      save(); ui.progEdit = null; ui.screen = 'home'; render(true); toast(t('saved')); break;
+      save(); ui.progEdit = null; ui.progDirty = false; ui.screen = 'home'; render(true); toast(t('saved')); break;
     case 'progdel':
       if (!confirm(t('delete_q'))) break;
       state.programs = state.programs.filter(function (x) { return x.id !== ui.progEdit.id; });
@@ -952,15 +1010,16 @@ function onInput(e) {
     s.s = isNaN(v) ? 0 : Math.round(v * 60);
     persist();
   } else if (k === 'wname') { curW().name = el.value; persist(); }
-  else if (k === 'pname') ui.progEdit.name = el.value;
-  else if (k === 'pactive') ui.progEdit.active = el.checked;
-  else if (k === 'pdname') pday(ui.progEdit, el.dataset.dow).name = el.value;
+  else if (k === 'pname') { ui.progEdit.name = el.value; autoSaveProg(); }
+  else if (k === 'pactive') { ui.progEdit.active = el.checked; autoSaveProg(); }
+  else if (k === 'pdname') { pday(ui.progEdit, el.dataset.dow).name = el.value; autoSaveProg(); }
   else if (k === 'pi') {
     var it = pday(ui.progEdit, el.dataset.dow).items[+el.dataset.i], f = el.dataset.f;
     v = num(el.value);
     if (f === 'w') it.w = isNaN(v) ? null : toKg(v);
     else if (f === 'min') it.min = isNaN(v) ? 0 : v;
     else it[f] = isNaN(v) ? 0 : Math.max(0, Math.round(v));
+    autoSaveProg();
   }
   else if (k === 'q') {
     applyLibFilter();
@@ -980,6 +1039,7 @@ function boot() {
   load();
   if (state.active) { ui.screen = 'active'; wakeOn(); }
   $('sheet').setAttribute('data-act', 'bd');
+  document.addEventListener('pointerdown', onDragStart);
   document.addEventListener('click', onClick);
   document.addEventListener('input', onInput);
   document.addEventListener('change', onChange);

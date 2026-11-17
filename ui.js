@@ -578,7 +578,7 @@ function settingsHTML() {
   h += '<label class="f">' + t('s_remind') + '</label><input type="time" data-set="remindTime" value="' + esc(S.remindTime) + '">';
   h += '<div class="chkrow"><input type="checkbox" id="swk" data-set="wake"' + (S.wake ? ' checked' : '') + '><label for="swk">' + t('s_wake') + '</label></div>';
   h += '<label class="f">' + t('s_levels') + '</label><input data-set="levels" value="' + esc(S.levels) + '" placeholder="' + esc(t('levels')) + '">';
-  h += '</div><h2>' + t('s_data') + '</h2><button class="btn ghost" data-act="export">' + t('export') + '</button><button class="btn ghost" data-act="import">' + t('import') + '</button><div class="sub">' + t('backup_note') + '</div>';
+  h += '</div><h2>' + t('s_data') + '</h2><button class="btn ghost" data-act="export">' + t('export') + '</button><button class="btn ghost" data-act="import">' + t('import') + '</button><div class="sub">' + t('backup_note') + '</div><div class="sub" style="margin-top:14px;text-align:center">' + t('version') + ': ' + APP_VERSION + '</div>';
   h += '<button class="btn danger" data-act="reset" style="margin-top:20px">' + t('reset') + '</button>';
   return h;
 }

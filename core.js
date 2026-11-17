@@ -6,6 +6,7 @@ var KG_LB = 2.20462;
 var state = null;
 
 /* ---------- утилиты ---------- */
+var APP_VERSION = 'v7';
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function pad(n) { return n < 10 ? '0' + n : '' + n; }
 function esc(s) {

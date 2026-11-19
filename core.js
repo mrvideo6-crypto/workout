@@ -6,7 +6,7 @@ var KG_LB = 2.20462;
 var state = null;
 
 /* ---------- утилиты ---------- */
-var APP_VERSION = 'v7';
+var APP_VERSION = 'v8';
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function pad(n) { return n < 10 ? '0' + n : '' + n; }
 function esc(s) {
@@ -223,6 +223,19 @@ function bumpCheck(W, e) {
   var step = (ex.prog && ex.prog.step > 0) ? ex.prog.step : 2.5, base = topWeight(e.sets) || it.w || 0;
   return { pid: W.progId, dow: W.dow, iid: it.id, name: ex.name, reps: minR, up: it.up, from: base, to: rnd2(base + step) };
 }
+// Вес, с которым прошла тренировка, становится рабочим весом в программе на следующий раз.
+// Если вес только что повысили через подсказку (bumpAt в этой тренировке), его не трогаем.
+function syncPlanWeights(W) {
+  var changed = false;
+  W.entries.forEach(function (e) {
+    var it = planItem(W, e), ex = exById(e.ex);
+    if (!it || !ex || ex.type !== 'strength') return;
+    if (it.bumpAt && it.bumpAt >= W.start) return;
+    var top = topWeight(e.sets.filter(function (s) { return s.done; }));
+    if (top > 0 && Math.abs(top - (it.w || 0)) > 1e-6) { it.w = top; changed = true; }
+  });
+  return changed;
+}
 function applyBump(b, newKg) {
   var p = progById(b.pid), d = p && p.days ? p.days[b.dow] : null;
   if (!d) return false;
@@ -274,6 +287,86 @@ function workoutCardioMin(w) {
   var sec = 0;
   w.entries.forEach(function (e) { e.sets.forEach(function (s) { if (s.done && ('s' in s)) sec += s.s || 0; }); });
   return sec / 60;
+}
+
+/* ---------- экспорт истории в текст ---------- */
+function expDate(ts, o) { return new Date(ts).toLocaleDateString(loc(), o); }
+function expTime(ts) { var d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function monthKey(ts) { var d = new Date(ts); return d.getFullYear() + '-' + pad(d.getMonth() + 1); }
+function expRange(scope, key) {
+  if (scope === 'week') { var a = parseDay(key), b = new Date(a); b.setDate(b.getDate() + 7); return [a.getTime(), b.getTime()]; }
+  var p = key.split('-');
+  return [new Date(+p[0], +p[1] - 1, 1).getTime(), new Date(+p[0], +p[1], 1).getTime()];
+}
+// Список периодов, в которых есть тренировки (новые сверху)
+function expPeriods(scope) {
+  var out = [], seen = {}, i, w, k, r;
+  for (i = state.workouts.length - 1; i >= 0; i--) {
+    w = state.workouts[i];
+    if (scope === 'workout') {
+      if (out.length >= 150) break;
+      out.push({ key: w.id, label: expDate(w.start, { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + (w.name || t('workout')) });
+      continue;
+    }
+    k = scope === 'week' ? dayKey(weekStart(w.start)) : monthKey(w.start);
+    if (seen[k]) continue;
+    seen[k] = 1;
+    r = expRange(scope, k);
+    out.push({ key: k, label: scope === 'week' ? expPeriodLabel(scope, r) : expDate(w.start, { month: 'long', year: 'numeric' }) });
+  }
+  return out;
+}
+function expPeriodLabel(scope, r) {
+  if (scope === 'week') return expDate(r[0], { day: 'numeric', month: 'short' }) + ' – ' + expDate(r[1] - 864e5, { day: 'numeric', month: 'short', year: 'numeric' });
+  return expDate(r[0], { month: 'long', year: 'numeric' });
+}
+function workoutText(w) {
+  var L = [], meta = [expDate(w.start, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), expTime(w.start)];
+  if (w.end) meta.push(t('n_min', { n: Math.max(1, Math.round((w.end - w.start) / 60000)) }));
+  L.push(w.name || t('workout'));
+  L.push(meta.join(' · '));
+  w.entries.forEach(function (e) {
+    var ex = exById(e.ex), sets = e.sets.filter(function (s) { return s.done; }), sec = 0;
+    if (!ex || !sets.length) return;
+    L.push('');
+    L.push(ex.name);
+    if (ex.type === 'cardio') {
+      sets.forEach(function (s) { sec += s.s || 0; });
+      L.push('  ' + t('n_min', { n: f1(sec / 60) }));
+      return;
+    }
+    sets.forEach(function (s, i) {
+      L.push('  ' + (i + 1) + ') ' + (s.w > 0 ? fmtW(s.w) + ' ' + unitLabel() + ' × ' + (s.r || 0) : t('n_reps', { n: s.r || 0 })));
+    });
+  });
+  return L.join('\n');
+}
+function statsLine(list) {
+  var n = 0, vol = 0, min = 0, parts = [];
+  list.forEach(function (w) {
+    n += workoutSets(w);
+    min += workoutCardioMin(w);
+    w.entries.forEach(function (e) {
+      e.sets.forEach(function (s) { if (s.done && !('s' in s)) vol += (s.w || 0) * (s.r || 0); });
+    });
+  });
+  if (n) parts.push(t('n_sets', { n: n }));
+  if (vol > 0) parts.push(t('exp_vol') + ' ' + Math.round(toDisp(vol)) + ' ' + unitLabel());
+  if (min > 0) parts.push(t('exp_cardio') + ' ' + t('n_min', { n: Math.round(min) }));
+  return parts.length ? t('exp_total') + ': ' + parts.join(' · ') : '';
+}
+function historyText(scope, key) {
+  var list = [], head = '', r, i, w;
+  if (scope === 'workout') {
+    for (i = 0; i < state.workouts.length; i++) if (state.workouts[i].id === key) list.push(state.workouts[i]);
+  } else {
+    r = expRange(scope, key);
+    list = state.workouts.filter(function (x) { return x.start >= r[0] && x.start < r[1]; });
+    head = t(scope === 'week' ? 'exp_week_h' : 'exp_month_h') + ': ' + expPeriodLabel(scope, r) + '\n' + t('exp_count', { n: list.length }) + '\n\n';
+  }
+  if (!list.length) return '';
+  var body = list.map(workoutText).join('\n\n----------\n\n'), st = statsLine(list);
+  return head + body + (st ? '\n\n' + st : '');
 }
 
 /* ---------- рекорды, серии для графиков ---------- */

@@ -99,7 +99,12 @@ var I18N = {
     export: 'Экспорт данных', import: 'Импорт данных',
     backup_note: 'Сохраните файл в «Файлы» или iCloud Drive. Фото в копию не входят.',
     import_q: 'Заменить все данные данными из файла?', imported: 'Данные загружены', import_err: 'Не удалось прочитать файл',
-    reset: 'Стереть все данные', reset_q: 'Стереть все данные приложения?', reset_q2: 'Точно? Это нельзя отменить.'
+    reset: 'Стереть все данные', reset_q: 'Стереть все данные приложения?', reset_q2: 'Точно? Это нельзя отменить.',
+    exp_btn: 'Экспорт в текст', exp_title: 'Экспорт истории в текст', exp_workout: 'Тренировка', exp_week: 'Неделя', exp_month: 'Месяц',
+    exp_pick: 'Выберите период', exp_copy: 'Копировать', exp_share: 'Поделиться', exp_file: 'Скачать .txt',
+    exp_copied: 'Скопировано', exp_copy_err: 'Не удалось скопировать: выделите текст вручную', exp_empty: 'Нет тренировок для экспорта',
+    exp_week_h: 'Неделя', exp_month_h: 'Месяц', exp_count: 'Тренировок: {n}', exp_total: 'Итого', exp_vol: 'объём', exp_cardio: 'кардио',
+    n_reps: '{n} повт.'
   },
   en: {
     tab_workout: 'Workouts', tab_progress: 'Progress', tab_body: 'Body', tab_rewards: 'Rewards',
@@ -199,6 +204,11 @@ var I18N = {
     export: 'Export data', import: 'Import data',
     backup_note: 'Save the file to Files or iCloud Drive. Photos are not included.',
     import_q: 'Replace all data with the data from the file?', imported: 'Data loaded', import_err: 'Could not read the file',
-    reset: 'Erase all data', reset_q: 'Erase all app data?', reset_q2: 'Are you sure? This cannot be undone.'
+    reset: 'Erase all data', reset_q: 'Erase all app data?', reset_q2: 'Are you sure? This cannot be undone.',
+    exp_btn: 'Export as text', exp_title: 'Export history as text', exp_workout: 'Workout', exp_week: 'Week', exp_month: 'Month',
+    exp_pick: 'Choose a period', exp_copy: 'Copy', exp_share: 'Share', exp_file: 'Download .txt',
+    exp_copied: 'Copied', exp_copy_err: 'Could not copy: select the text manually', exp_empty: 'No workouts to export',
+    exp_week_h: 'Week', exp_month_h: 'Month', exp_count: 'Workouts: {n}', exp_total: 'Total', exp_vol: 'volume', exp_cardio: 'cardio',
+    n_reps: '{n} reps'
   }
 };

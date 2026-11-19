@@ -233,6 +233,7 @@ function homeHTML() {
   var ws = state.workouts.slice().reverse();
   h += '<h2>' + t('history') + '</h2>';
   if (!ws.length) h += '<div class="empty">' + t('no_hist') + '</div>';
+  else h += '<button class="btn ghost" data-act="expopen">⇪ ' + t('exp_btn') + '</button>';
   ws.slice(0, ui.histN).forEach(function (w) {
     h += '<div class="card li" data-act="openw" data-id="' + w.id + '" style="cursor:pointer"><div class="grow"><b>' + esc(w.name) + '</b><div class="sub">' + fmtDateLong(w.start) + ' · ' + histSummary(w) + '</div></div><span class="sub">›</span></div>';
   });
@@ -249,6 +250,37 @@ function openTrain() {
   });
   h += '<button class="btn ghost" data-act="startempty">' + t('start_empty') + '</button><button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
   showSheet(h);
+}
+/* ---------- экспорт истории в текст ---------- */
+function openExport(scope, key) {
+  var per = expPeriods(scope);
+  if (!per.length) { toast(t('exp_empty')); return; }
+  if (!key || !per.some(function (p) { return p.key === key; })) key = per[0].key;
+  ui.exp = { scope: scope, key: key };
+  var h = '<h3>' + t('exp_title') + '</h3><div class="chips">' + ['workout', 'week', 'month'].map(function (s) {
+    return '<button class="' + (scope === s ? 'on' : '') + '" data-act="expscope" data-v="' + s + '">' + t('exp_' + s) + '</button>';
+  }).join('') + '</div>';
+  h += '<label class="f">' + t('exp_pick') + '</label><select data-in="expkey">' + per.map(function (p) { return opt(p.key, p.label, p.key === key); }).join('') + '</select>';
+  h += '<label class="f">&nbsp;</label><textarea id="exptext" rows="12" readonly style="font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.4"></textarea>';
+  h += '<div class="two" style="margin-top:8px"><button class="btn" data-act="expcopy">' + t('exp_copy') + '</button><button class="btn ghost" data-act="expshare">' + t('exp_share') + '</button></div>';
+  h += '<button class="btn ghost" data-act="expfile">' + t('exp_file') + '</button><button class="btn ghost" data-act="closesheet">' + t('close') + '</button>';
+  showSheet(h);
+  updateExport();
+}
+function expText() { return ui.exp ? historyText(ui.exp.scope, ui.exp.key) : ''; }
+function updateExport() { var el = $('exptext'); if (el) el.value = expText(); }
+function expCopy() {
+  var txt = expText(), el = $('exptext');
+  function fallback() {
+    try { el.focus(); el.select(); el.setSelectionRange(0, txt.length); toast(document.execCommand('copy') ? t('exp_copied') : t('exp_copy_err')); }
+    catch (e) { toast(t('exp_copy_err')); }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { toast(t('exp_copied')); }, fallback);
+  else fallback();
+}
+function expFileName() {
+  var e = ui.exp, base = e.scope === 'workout' ? 'workout' : e.scope;
+  return 'training-' + base + '-' + (e.scope === 'workout' ? todayStr() : e.key) + '.txt';
 }
 function openDayPick(pid) {
   var p = progById(pid), names = wdNames(), h = '<h3>' + t('rest_pick') + '</h3>', any = false;
@@ -307,6 +339,7 @@ function activeHTML() {
   if (!W.entries.length) h += '<div class="empty">' + t('w_empty') + '</div>';
   h += '<button class="btn ghost" data-act="addex" data-to="workout">+ ' + t('add_ex') + '</button>';
   if (ui.edit) {
+    if (state.workouts.some(function (x) { return x.id === W.id; })) h += '<button class="btn ghost" data-act="expone" data-id="' + W.id + '">⇪ ' + t('exp_btn') + '</button>';
     h += '<button class="btn big" data-act="savedit">' + t('save') + '</button><button class="btn danger" data-act="deledit">' + t('delete_w') + '</button>';
   } else {
     h += '<button class="btn big" data-act="finish">' + t('finish') + '</button><button class="btn danger" data-act="cancelw">' + t('cancel_w') + '</button>';
@@ -769,6 +802,15 @@ function onClick(e) {
       for (i = 0; i < state.workouts.length; i++) if (state.workouts[i].id === d.id) { ui.edit = clone(state.workouts[i]); ui.screen = 'view'; }
       render(true); break;
     case 'histmore': ui.histN += 15; render(); break;
+    case 'expopen': openExport('week'); break;
+    case 'expone': openExport('workout', d.id); break;
+    case 'expscope': openExport(d.v); break;
+    case 'expcopy': expCopy(); break;
+    case 'expshare':
+      if (navigator.share) navigator.share({ text: expText() }).catch(function () {});
+      else expCopy();
+      break;
+    case 'expfile': saveFile(expFileName(), 'text/plain', expText()); break;
     case 'addex': openPicker(d.to, d.kind); break;
     case 'pick': addExerciseTo(d.id); break;
     case 'newex':
@@ -981,6 +1023,7 @@ function finishGo() {
   var W = state.active;
   var lvBefore = levelInfo(totalXP()).L;
   if (!finalizeWorkout(W)) { toast(t('no_sets')); return; }
+  syncPlanWeights(W);
   state.workouts.push(W);
   sortAll(state);
   state.active = null; ui.rest = null; ui.sw = null; wakeOff();
@@ -1032,6 +1075,7 @@ function onChange(e) {
   var k = el.dataset['in'];
   if (k === 'pex') { ui.pex = el.value; render(); }
   else if (k === 'cmp') updateCompare();
+  else if (k === 'expkey' && ui.exp) { ui.exp.key = el.value; updateExport(); }
 }
 
 /* ---------- запуск ---------- */
